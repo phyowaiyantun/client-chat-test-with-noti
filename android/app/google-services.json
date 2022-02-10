@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "922861658893",
+    "project_id": "noti-chat-test",
+    "storage_bucket": "noti-chat-test.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:922861658893:android:a4258e73ed342745244644",
+        "android_client_info": {
+          "package_name": "com.example.admin_to_client_chat_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "922861658893-kkk1pddidu1lp5oigjcp3qstci23mrj1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.admin_to_client_chat_app",
+            "certificate_hash": "cc4f9fad7cae5996b61b8d43e959059f0fe5fe88"
+          }
+        },
+        {
+          "client_id": "922861658893-edk4jcqlfd7km5ftdkfvc7gq81vv2d33.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJsAndxzEHkV4Dtn10_EBS4A3qCMfwUdk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "922861658893-edk4jcqlfd7km5ftdkfvc7gq81vv2d33.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
