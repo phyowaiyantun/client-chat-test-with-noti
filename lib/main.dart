@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:admin_to_client_chat_app/utils.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -7,9 +8,23 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
+import 'dart:io';
+import 'package:flutter/gestures.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+// ? Notification background handler
+Future<void> backgroundnotiHandler(RemoteMessage message) async {
+  // IconicLoalNotificationService.display(message);
+  print(message.data);
+  print("+++++++++++++++");
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(backgroundnotiHandler);
   runApp(const MyApp());
 }
 
@@ -52,6 +67,8 @@ class _myHomePageState extends State<myHomePage> {
 
   late String noti_token;
 
+  final GlobalKey webViewKey = GlobalKey();
+
   void apiSaveData() async {
     var send = await http.post(
       Uri.parse(stateUrl),
@@ -88,12 +105,35 @@ class _myHomePageState extends State<myHomePage> {
           print(message.notification!.body);
           print(message.data);
         }
+        print("hi");
         IconicLoalNotificationService.display(message);
       });
     } else {
       print('prmission denied');
     }
   }
+
+  InAppWebViewController? webViewController;
+  InAppWebViewGroupOptions options = InAppWebViewGroupOptions(
+      crossPlatform: InAppWebViewOptions(
+        useShouldOverrideUrlLoading: true,
+        mediaPlaybackRequiresUserGesture: false,
+        verticalScrollBarEnabled: false,
+        horizontalScrollBarEnabled: false,
+      ),
+      android: AndroidInAppWebViewOptions(
+        allowFileAccess: true,
+        allowContentAccess: true,
+        useHybridComposition: true,
+      ),
+      ios: IOSInAppWebViewOptions(
+        allowsInlineMediaPlayback: true,
+      ));
+
+  late PullToRefreshController pullToRefreshController;
+  String url = "";
+  double progress = 0;
+  final urlController = TextEditingController();
 
   @override
   void initState() {
@@ -114,6 +154,7 @@ class _myHomePageState extends State<myHomePage> {
     );
     IconicLoalNotificationService.initilalize(context);
     FirebaseMessaging.instance.getInitialMessage().then((message) {
+      print('object');
       if (message != null) {
         final routeFromMessage = message.data["routePath"];
         Navigator.of(context).pushNamed(routeFromMessage);
@@ -124,16 +165,165 @@ class _myHomePageState extends State<myHomePage> {
     // * app in background
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       final routeFromMessage = message.data["routePath"];
-      print(routeFromMessage);
       Navigator.of(context).pushNamed(routeFromMessage);
     });
+
+    pullToRefreshController = PullToRefreshController(
+      options: PullToRefreshOptions(
+        color: Colors.green,
+      ),
+      onRefresh: () async {
+        if (Platform.isAndroid) {
+          webViewController?.reload();
+        } else if (Platform.isIOS) {
+          webViewController?.loadUrl(
+              urlRequest: URLRequest(url: await webViewController?.getUrl()));
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Hello World'),
+      appBar: AppBar(title: Text("FCM Test")),
+      body: buildaddProduct(context),
+    );
+  }
+
+  @override
+  Widget buildaddProduct(BuildContext context) {
+    return SafeArea(
+      child: ScreenUtilInit(
+        builder: () => WillPopScope(
+          onWillPop: () async {
+            if (await webViewController!.canGoBack()) {
+              webViewController!.goBack();
+              return false;
+            } else {
+              return true;
+            }
+          },
+          child: Column(
+            children: <Widget>[
+              Expanded(
+                child: Stack(
+                  children: [
+                    InAppWebView(
+                      key: webViewKey,
+                      initialUrlRequest: URLRequest(
+                        url: Uri.parse("https://phyo.iconicmyanmar.com/"),
+                      ),
+                      initialOptions: options,
+                      pullToRefreshController: pullToRefreshController,
+                      onWebViewCreated: (controller) {
+                        webViewController = controller;
+                      },
+                      onLoadStart: (controller, url) {
+                        setState(() {
+                          this.url = url.toString();
+                          urlController.text = this.url;
+                        });
+                      },
+                      androidOnPermissionRequest:
+                          (controller, origin, resources) async {
+                        return PermissionRequestResponse(
+                            resources: resources,
+                            action: PermissionRequestResponseAction.GRANT);
+                      },
+                      shouldOverrideUrlLoading:
+                          (controller, navigationAction) async {
+                        var uri = navigationAction.request.url!;
+
+                        if (![
+                          "http",
+                          "https",
+                          "file",
+                          "chrome",
+                          "data",
+                          "javascript",
+                          "about"
+                        ].contains(uri.scheme)) {
+                          if (await canLaunch(url)) {
+                            // Launch the App
+                            await launch(
+                              url,
+                            );
+                            // and cancel the request
+                            return NavigationActionPolicy.CANCEL;
+                          }
+                        }
+
+                        return NavigationActionPolicy.ALLOW;
+                      },
+                      onLoadStop: (controller, url) async {
+                        pullToRefreshController.endRefreshing();
+                        setState(() {
+                          this.url = url.toString();
+                          urlController.text = this.url;
+                        });
+                      },
+                      onLoadError: (controller, url, code, message) {
+                        pullToRefreshController.endRefreshing();
+                        setState(() {});
+                      },
+                      onProgressChanged: (controller, progress) {
+                        if (progress == 100) {
+                          pullToRefreshController.endRefreshing();
+                        }
+                        setState(() {
+                          this.progress = progress / 100;
+                          urlController.text = this.url;
+                        });
+                      },
+                      onUpdateVisitedHistory:
+                          (controller, url, androidIsReload) {
+                        setState(() {
+                          this.url = url.toString();
+                          urlController.text = this.url;
+                        });
+                      },
+                      onConsoleMessage: (controller, consoleMessage) {
+                        print(consoleMessage);
+                      },
+                    ),
+                    progress < 1.0
+                        ? LinearProgressIndicator(value: progress)
+                        : Container(),
+                  ],
+                ),
+              ),
+              // ButtonBar(
+              //   alignment: MainAxisAlignment.center,
+              //   children: <Widget>[
+              //     ElevatedButton(
+              //       child: Icon(Icons.arrow_back),
+              //       onPressed: () {
+              //         webViewController?.goBack();
+              //       },
+              //     ),
+              //     ElevatedButton(
+              //       child: Icon(Icons.arrow_forward),
+              //       onPressed: () {
+              //         webViewController?.goForward();
+              //       },
+              //     ),
+              //     ElevatedButton(
+              //       child: Icon(Icons.refresh),
+              //       onPressed: () {
+              //         webViewController?.reload();
+              //       },
+              //     ),
+              //   ],
+              // ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -157,17 +347,33 @@ class IconicLoalNotificationService {
 
   static void display(RemoteMessage message) async {
     try {
+      print(".....");
+      print(message.data);
+      String channel = message.data['default_channel'];
+      final bigPicturePath =
+          await Utils.downloadFile(message.data['big_pic'], 'bigPicture');
+      final largeIconPath =
+          await Utils.downloadFile(message.data['icon'], 'largeIcon');
+
+      final styleInformation = BigPictureStyleInformation(
+        FilePathAndroidBitmap(bigPicturePath),
+        largeIcon: FilePathAndroidBitmap(largeIconPath),
+        contentTitle: 'Testing',
+        summaryText: 'symmaryTest',
+      );
       final id = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final NotificationDetails notificationDetails = NotificationDetails(
         android: AndroidNotificationDetails(
           "general-noti",
+          // channel,
           "General Notifications",
           channelDescription: "This channel is for general notifications.",
-          importance: Importance.max,
+          importance: Importance.high,
           priority: Priority.high,
           ticker: "ticker",
           // sound: RawResourceAndroidNotificationSound('default'),
           playSound: true,
+          styleInformation: styleInformation,
         ),
       );
       await _notificationsPlugin.show(
@@ -177,7 +383,6 @@ class IconicLoalNotificationService {
         notificationDetails,
         payload: message.data['routePath'],
       );
-      print(message);
     } on Exception catch (e) {
       print(e);
     }
